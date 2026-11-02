@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="noteGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background with subtle rounded shape -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGradient)" />
+
+  <!-- Subtle glow ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="8" />
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="4" stroke-dasharray="8 8" />
+
+  <!-- Music Note Icon with Shadow -->
+  <g filter="url(#dropShadow)" transform="translate(136, 126)">
+    <path d="M192 48L192 188C182.8 181.7 171.8 178 160 178C133.5 178 112 199.5 112 226C112 252.5 133.5 274 160 274C186.5 274 208 252.5 208 226L208 96L240 96L240 48L192 48ZM64 96L64 236C54.8 229.7 43.8 226 32 226C5.5 226 -16 247.5 -16 274C-16 300.5 5.5 322 32 322C58.5 322 80 300.5 80 274L80 144L176 112L176 64L64 96Z" fill="url(#noteGradient)"/>
+  </g>
+</svg>
