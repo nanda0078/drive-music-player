@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="maskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <!-- Full bleed background for maskable adaptive icon -->
+  <rect width="512" height="512" fill="url(#maskGrad)" />
+  <!-- Centered safe zone icon -->
+  <g fill="#FFFFFF" transform="translate(160, 150) scale(0.8)">
+    <path d="M192 48L192 188C182.8 181.7 171.8 178 160 178C133.5 178 112 199.5 112 226C112 252.5 133.5 274 160 274C186.5 274 208 252.5 208 226L208 96L240 96L240 48L192 48ZM64 96L64 236C54.8 229.7 43.8 226 32 226C5.5 226 -16 247.5 -16 274C-16 300.5 5.5 322 32 322C58.5 322 80 300.5 80 274L80 144L176 112L176 64L64 96Z"/>
+  </g>
+</svg>

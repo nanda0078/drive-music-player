@@ -1,0 +1,6 @@
+{
+  "name": "Drive Music Player",
+  "description": "Aplikasi pemutar musik pribadi berbasis Google Drive dengan Progressive Web App (PWA) installable di Android, 10-Band Graphic Equalizer, preset kustom, bass boost, preamp, limiter, upload folder musik, sinkronisasi Google Drive, playlist, HTTP range streaming, dan background playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

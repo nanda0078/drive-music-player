@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    function isValidMusic(data) {
+      return data.userId == request.auth.uid &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 256 &&
+        data.driveFileId is string && data.driveFileId.size() <= 256;
+    }
+
+    function isValidFolder(data) {
+      return data.userId == request.auth.uid &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+        data.driveFolderId is string && data.driveFolderId.size() <= 256;
+    }
+
+    function isValidPlaylist(data) {
+      return data.userId == request.auth.uid &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+        data.songIds is list && data.songIds.size() <= 1000;
+    }
+
+    // Music Collection
+    match /music/{musicId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(musicId) && isValidMusic(request.resource.data);
+      allow update: if isSignedIn() && isValidId(musicId) &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidMusic(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(musicId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Folders Collection
+    match /folders/{folderId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(folderId) && isValidFolder(request.resource.data);
+      allow update: if isSignedIn() && isValidId(folderId) &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidFolder(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(folderId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Playlists Collection
+    match /playlists/{playlistId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(playlistId) && isValidPlaylist(request.resource.data);
+      allow update: if isSignedIn() && isValidId(playlistId) &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidPlaylist(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(playlistId) && resource.data.userId == request.auth.uid;
+    }
+  }
+}

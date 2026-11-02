@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Drive Music Player</title>
+    <meta name="description" content="Aplikasi pemutar musik pribadi berbasis Google Drive dengan streaming cepat, offline caching, dan background playback." />
+    
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <link rel="mask-icon" href="/icon.svg" color="#2563EB" />
+
+    <!-- Android & Chrome Web App Meta Tags -->
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Drive Music" />
+
+    <!-- iOS Safari Web App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Drive Music" />
+
+    <!-- Open Graph & Social Cards -->
+    <meta property="og:title" content="Drive Music Player" />
+    <meta property="og:description" content="Aplikasi pemutar musik pribadi berbasis Google Drive dengan background playback." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon-512.svg" />
+  </head>
+  <body class="bg-[#F8FAFC] select-none overscroll-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

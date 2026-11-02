@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "music": {
+      "title": "Music Track",
+      "description": "Metadata for uploaded music tracks stored in Google Drive",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "driveFileId": { "type": "string", "maxLength": 256 },
+        "driveFolderId": { "type": "string", "maxLength": 256 },
+        "folderName": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 256 },
+        "title": { "type": "string", "maxLength": 256 },
+        "artist": { "type": "string", "maxLength": 256 },
+        "album": { "type": "string", "maxLength": 256 },
+        "duration": { "type": "number" },
+        "mimeType": { "type": "string", "maxLength": 128 },
+        "fileSize": { "type": "number" },
+        "artworkUrl": { "type": "string", "maxLength": 2048 },
+        "isFavorite": { "type": "boolean" },
+        "playCount": { "type": "number" },
+        "uploadStatus": { "type": "string", "enum": ["Menunggu", "Mengunggah", "Berhasil", "Gagal"] },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["driveFileId", "title", "userId", "createdAt"]
+    },
+    "folder": {
+      "title": "Music Folder",
+      "description": "Folder uploaded from device containing music tracks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "driveFolderId": { "type": "string", "maxLength": 256 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "songCount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["name", "driveFolderId", "userId", "createdAt"]
+    },
+    "playlist": {
+      "title": "Playlist",
+      "description": "User created music playlist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "songIds": { "type": "array" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["name", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/music/{musicId}": {
+      "schema": "music",
+      "description": "Music collection storing all uploaded tracks"
+    },
+    "/folders/{folderId}": {
+      "schema": "folder",
+      "description": "Folders collection storing music directories uploaded to Google Drive"
+    },
+    "/playlists/{playlistId}": {
+      "schema": "playlist",
+      "description": "Playlists collection created by users"
+    }
+  }
+}
