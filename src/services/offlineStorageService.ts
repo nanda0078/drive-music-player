@@ -1,5 +1,6 @@
 import { MusicTrack } from "../types/music";
 import { getAccessToken, refreshGoogleDriveToken } from "../firebase/config";
+import { isStaticDeployment } from "./driveAudioService";
 
 const DB_NAME = "DriveMusicPlayer_OfflineDB";
 const DB_VERSION = 2;
@@ -469,18 +470,21 @@ async function fetchGoogleDriveMetadata(
   fileId: string,
   token: string
 ): Promise<{ size: number; mimeType: string; fileName: string }> {
-  try {
-    // 1. Try backend metadata endpoint
-    const res = await fetch(`/api/audio/metadata/${encodeURIComponent(fileId)}?token=${encodeURIComponent(token)}`);
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        size: data.size || 0,
-        mimeType: data.mimeType || "audio/mpeg",
-        fileName: data.name || "",
-      };
-    }
-  } catch {}
+  // If running on static deployment (GitHub Pages), skip /api/ proxy and query Google Drive API directly
+  if (!isStaticDeployment()) {
+    try {
+      // 1. Try backend metadata endpoint
+      const res = await fetch(`/api/audio/metadata/${encodeURIComponent(fileId)}?token=${encodeURIComponent(token)}`);
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          size: data.size || 0,
+          mimeType: data.mimeType || "audio/mpeg",
+          fileName: data.name || "",
+        };
+      }
+    } catch {}
+  }
 
   try {
     // 2. Direct Google Drive API v3 fallback
@@ -621,25 +625,55 @@ async function downloadSingleStreamWithProgress(
   if (!token) token = await refreshGoogleDriveToken();
   if (!token) throw new Error("Akun Google Drive belum terhubung.");
 
-  const fileNameParam = encodeURIComponent(track.fileName || track.title || "");
-  const streamUrl = `/api/audio/stream/${encodeURIComponent(
-    track.driveFileId
-  )}?token=${encodeURIComponent(token)}&mimeType=${encodeURIComponent(
-    track.mimeType || "audio/mpeg"
-  )}&fileName=${fileNameParam}`;
+  let response: Response | null = null;
 
-  const response = await fetch(streamUrl, { method: "GET", signal });
+  // On static deployments (e.g. GitHub Pages), skip backend proxy and download directly from Google Drive API
+  if (isStaticDeployment()) {
+    const directUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+      track.driveFileId
+    )}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`;
+    response = await fetch(directUrl, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+  } else {
+    // Localhost / Node proxy
+    const fileNameParam = encodeURIComponent(track.fileName || track.title || "");
+    const streamUrl = `/api/audio/stream/${encodeURIComponent(
+      track.driveFileId
+    )}?token=${encodeURIComponent(token)}&mimeType=${encodeURIComponent(
+      track.mimeType || "audio/mpeg"
+    )}&fileName=${fileNameParam}`;
+
+    try {
+      response = await fetch(streamUrl, { method: "GET", signal });
+    } catch {
+      response = null;
+    }
+
+    // If proxy failed or 404, fall back to direct Google Drive API
+    if (!response || response.status === 404) {
+      const directUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+        track.driveFileId
+      )}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`;
+      response = await fetch(directUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+    }
+  }
 
   if (!response.ok && response.status !== 206) {
     if (response.status === 401) {
       const refreshedToken = await refreshGoogleDriveToken();
       if (refreshedToken) {
-        const retryUrl = `/api/audio/stream/${encodeURIComponent(
-          track.driveFileId
-        )}?token=${encodeURIComponent(refreshedToken)}&mimeType=${encodeURIComponent(
-          track.mimeType || "audio/mpeg"
-        )}&fileName=${fileNameParam}`;
-        const retryRes = await fetch(retryUrl, { method: "GET", signal });
+        const retryUrl = isStaticDeployment()
+          ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(track.driveFileId)}?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`
+          : `/api/audio/stream/${encodeURIComponent(track.driveFileId)}?token=${encodeURIComponent(refreshedToken)}&mimeType=${encodeURIComponent(track.mimeType || "audio/mpeg")}&fileName=${encodeURIComponent(track.fileName || track.title || "")}`;
+        const retryHeaders: Record<string, string> = isStaticDeployment() ? { Authorization: `Bearer ${refreshedToken}` } : {};
+        const retryRes = await fetch(retryUrl, { method: "GET", headers: retryHeaders, signal });
         if (!retryRes.ok && retryRes.status !== 206) {
           throw new Error(`Gagal mengunduh audio (${retryRes.status})`);
         }
@@ -780,8 +814,8 @@ export async function downloadTrackForOffline(
   const fileName = driveMeta.fileName || track.fileName || `${track.title}.mp3`;
 
   // 4. Adaptive strategy selection:
-  // If file is small (< 8 MB) or size is unknown, use streaming download
-  if (totalBytes > 0 && totalBytes < CHUNK_THRESHOLD) {
+  // If file is small (< 8 MB), size is unknown, or running on static deployment without chunking proxy
+  if ((totalBytes > 0 && totalBytes < CHUNK_THRESHOLD) || isStaticDeployment()) {
     return downloadSingleStreamWithProgress(
       { ...track, fileSize: totalBytes, mimeType, fileName },
       onProgress,

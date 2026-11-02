@@ -21,6 +21,11 @@ import {
   revokeOfflineAudioUrl,
 } from "../services/offlineStorageService";
 import { backgroundAudioService } from "../services/backgroundAudioService";
+import {
+  isStaticDeployment,
+  fetchDirectDriveAudioBlob,
+  revokeDriveAudioBlobUrl,
+} from "../services/driveAudioService";
 
 export type PlaybackErrorType =
   | "token_expired"
@@ -244,6 +249,10 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Offline download offer auto-skip countdown timer ref
   const offerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Online direct stream Blob URL ref and abort controller ref
+  const activeOnlineBlobUrlRef = useRef<string | null>(null);
+  const onlineFetchAbortControllerRef = useRef<AbortController | null>(null);
 
   // Set of temporarily failed track IDs in current playback session
   const failedTrackIdsRef = useRef<Set<string>>(new Set());
@@ -582,7 +591,46 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
         return;
       }
 
-      // Probe stream endpoint with byte-range request to receive precise HTTP status
+      // If running on static deployment (GitHub Pages), run direct diagnosis
+      if (isStaticDeployment()) {
+        console.log(`[Player:Diagnostic] Running direct Google Drive API diagnosis for "${track.title}"...`);
+        try {
+          const directResult = await fetchDirectDriveAudioBlob(track.driveFileId, token, {
+            mimeType: track.mimeType,
+          });
+          if (activeOnlineBlobUrlRef.current) {
+            revokeDriveAudioBlobUrl(activeOnlineBlobUrlRef.current);
+          }
+          activeOnlineBlobUrlRef.current = directResult.blobUrl;
+          if (audioRef.current) {
+            audioRef.current.src = directResult.blobUrl;
+            audioRef.current.load();
+            if (resumePosition > 0) {
+              audioRef.current.currentTime = resumePosition;
+            }
+            await audioRef.current.play();
+            setIsPlaying(true);
+            setIsLoading(false);
+            setHasPlaybackError(false);
+            setPlaybackErrorType(null);
+            setErrorMessage(null);
+            clearPlaybackTimeout();
+            clearFailedTrack(track.id);
+            return;
+          }
+        } catch (diagErr: any) {
+          const errType = (diagErr?.code as PlaybackErrorType) || "general_error";
+          await handlePlaybackFailure(
+            track,
+            resumePosition,
+            diagErr?.message || "Gagal memuat streaming dari Google Drive.",
+            errType
+          );
+          return;
+        }
+      }
+
+      // Probe stream endpoint with byte-range request to receive precise HTTP status (Localhost with Express)
       const fileNameParam = encodeURIComponent(track.fileName || track.title || "");
       const probeUrl = `/api/audio/stream/${encodeURIComponent(
         track.driveFileId
@@ -629,6 +677,35 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
 
       if (probeRes.status === 404) {
+        console.log("[Player:Diagnostic] /api/audio/stream returned 404. Attempting direct Google Drive fallback...");
+        try {
+          const directResult = await fetchDirectDriveAudioBlob(track.driveFileId, token, {
+            mimeType: track.mimeType,
+          });
+          if (activeOnlineBlobUrlRef.current) {
+            revokeDriveAudioBlobUrl(activeOnlineBlobUrlRef.current);
+          }
+          activeOnlineBlobUrlRef.current = directResult.blobUrl;
+          if (audioRef.current) {
+            audioRef.current.src = directResult.blobUrl;
+            audioRef.current.load();
+            if (resumePosition > 0) {
+              audioRef.current.currentTime = resumePosition;
+            }
+            await audioRef.current.play();
+            setIsPlaying(true);
+            setIsLoading(false);
+            setHasPlaybackError(false);
+            setPlaybackErrorType(null);
+            setErrorMessage(null);
+            clearPlaybackTimeout();
+            clearFailedTrack(track.id);
+            return;
+          }
+        } catch (fallbackErr: any) {
+          console.warn("[Player:Diagnostic] Direct Google Drive fallback also failed:", fallbackErr);
+        }
+
         await handlePlaybackFailure(
           track,
           resumePosition,
@@ -966,6 +1043,15 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
       document.removeEventListener("visibilitychange", handleLifecycleResume);
       window.removeEventListener("pageshow", handleLifecycleResume);
       window.removeEventListener("focus", handleLifecycleResume);
+      clearPlaybackTimeout();
+      if (onlineFetchAbortControllerRef.current) {
+        onlineFetchAbortControllerRef.current.abort();
+        onlineFetchAbortControllerRef.current = null;
+      }
+      if (activeOnlineBlobUrlRef.current) {
+        revokeDriveAudioBlobUrl(activeOnlineBlobUrlRef.current);
+        activeOnlineBlobUrlRef.current = null;
+      }
     };
   }, []);
 
@@ -1034,13 +1120,57 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
           return;
         }
 
-        // Backend streaming URL supporting byte-range requests
-        const fileNameParam = encodeURIComponent(track.fileName || track.title || "");
-        streamUrl = `/api/audio/stream/${encodeURIComponent(
-          track.driveFileId
-        )}?token=${encodeURIComponent(token)}&mimeType=${encodeURIComponent(
-          track.mimeType || "audio/mpeg"
-        )}&fileName=${fileNameParam}`;
+        if (isStaticDeployment()) {
+          console.log(`[Player] Static host (GitHub Pages) detected. Streaming directly from Google Drive API for "${track.title}"...`);
+          if (onlineFetchAbortControllerRef.current) {
+            onlineFetchAbortControllerRef.current.abort();
+            onlineFetchAbortControllerRef.current = null;
+          }
+          const controller = new AbortController();
+          onlineFetchAbortControllerRef.current = controller;
+
+          try {
+            const directResult = await fetchDirectDriveAudioBlob(
+              track.driveFileId,
+              token,
+              {
+                mimeType: track.mimeType,
+                signal: controller.signal,
+              }
+            );
+
+            // Revoke previous active online blob URL before using new one
+            if (activeOnlineBlobUrlRef.current) {
+              revokeDriveAudioBlobUrl(activeOnlineBlobUrlRef.current);
+              activeOnlineBlobUrlRef.current = null;
+            }
+
+            activeOnlineBlobUrlRef.current = directResult.blobUrl;
+            streamUrl = directResult.blobUrl;
+          } catch (directErr: any) {
+            if (directErr.name === "AbortError") {
+              console.log("[Player] Direct audio fetch aborted.");
+              return;
+            }
+            console.error("[Player] Direct Google Drive audio fetch failed:", directErr);
+            const errType = (directErr?.code as PlaybackErrorType) || "general_error";
+            await handlePlaybackFailure(
+              track,
+              resumePosition,
+              directErr?.message || "Gagal memuat streaming audio langsung dari Google Drive.",
+              errType
+            );
+            return;
+          }
+        } else {
+          // Backend streaming URL supporting byte-range requests (Localhost with Express)
+          const fileNameParam = encodeURIComponent(track.fileName || track.title || "");
+          streamUrl = `/api/audio/stream/${encodeURIComponent(
+            track.driveFileId
+          )}?token=${encodeURIComponent(token)}&mimeType=${encodeURIComponent(
+            track.mimeType || "audio/mpeg"
+          )}&fileName=${fileNameParam}`;
+        }
       } else {
         // Device is offline and track is NOT downloaded
         await handlePlaybackFailure(
@@ -1057,11 +1187,12 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
       pendingResumePositionRef.current = resumePosition;
 
       // Check against current audio src
-      const currentSrcPath = audio.src
-        ? new URL(audio.src, window.location.href).pathname + new URL(audio.src, window.location.href).search
-        : "";
+      const isSameSrc = audio.src === streamUrl || (
+        !streamUrl.startsWith("blob:") &&
+        (new URL(audio.src || "", window.location.href).pathname + new URL(audio.src || "", window.location.href).search === streamUrl)
+      );
 
-      if (currentSrcPath !== streamUrl) {
+      if (!isSameSrc) {
         audio.src = streamUrl;
         audio.load();
       }
@@ -1524,6 +1655,14 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const resetPlayerState = useCallback(() => {
     clearPlaybackTimeout();
+    if (onlineFetchAbortControllerRef.current) {
+      onlineFetchAbortControllerRef.current.abort();
+      onlineFetchAbortControllerRef.current = null;
+    }
+    if (activeOnlineBlobUrlRef.current) {
+      revokeDriveAudioBlobUrl(activeOnlineBlobUrlRef.current);
+      activeOnlineBlobUrlRef.current = null;
+    }
     isUserPausedRef.current = true;
     equalizerEngine.setPlaybackActive(false);
     backgroundAudioService.releaseWakeLock();
