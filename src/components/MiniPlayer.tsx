@@ -477,7 +477,10 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onToggleFavorite }) => {
           <div className="flex items-center justify-center">
             <button
               id="btn-mobile-play-pause"
-              onClick={togglePlayPause}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayPause();
+              }}
               className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 active:scale-95 shadow-md shadow-blue-500/25 transition-all touch-manipulation cursor-pointer"
               title={isPlaying ? "Jeda" : "Putar"}
               aria-label={isPlaying ? "Jeda Pemutaran" : "Mulai Pemutaran"}
@@ -569,9 +572,14 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onToggleFavorite }) => {
             </button>
 
             <button
-              onClick={togglePlayPause}
-              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 hover:scale-105 transition-all shadow-md active:scale-95"
+              id="btn-desktop-play-pause"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayPause();
+              }}
+              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 hover:scale-105 transition-all shadow-md active:scale-95 cursor-pointer"
               title={isPlaying ? "Jeda" : "Putar"}
+              aria-label={isPlaying ? "Jeda Pemutaran" : "Mulai Pemutaran"}
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

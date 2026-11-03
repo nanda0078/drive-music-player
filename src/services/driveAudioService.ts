@@ -10,7 +10,7 @@
  * 2. Same-origin Blob URLs — Web Audio API 10-Band Equalizer runs with zero CORS taint.
  * 3. Instant seeking and scrubbing without byte-range roundtrips.
  * 4. Automatic token refresh on 401 and large file virus scan handling.
- * 5. Strict Blob URL lifecycle management to eliminate memory leaks.
+ * 5. Strict Blob URL lifecycle management and in-memory LRU caching to eliminate memory leaks and redundant network calls.
  */
 
 import { refreshGoogleDriveToken } from "../firebase/config";
@@ -25,6 +25,7 @@ export interface DirectAudioOptions {
   mimeType?: string;
   signal?: AbortSignal;
   onProgress?: (receivedBytes: number, totalBytes: number) => void;
+  bypassCache?: boolean;
 }
 
 export class DriveAudioError extends Error {
@@ -37,6 +38,81 @@ export class DriveAudioError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/**
+ * In-memory LRU cache for audio blobs.
+ * Stores up to MAX_BLOB_CACHE_COUNT tracks so replaying or switching recent tracks happens in 0ms without Google Drive API calls.
+ */
+interface CachedBlobEntry {
+  blobUrl: string;
+  blob: Blob;
+  mimeType: string;
+  lastAccessed: number;
+}
+
+const audioBlobCache = new Map<string, CachedBlobEntry>();
+const MAX_BLOB_CACHE_COUNT = 6;
+
+export function getCachedDriveAudioBlob(fileId: string): DirectAudioResult | null {
+  const cached = audioBlobCache.get(fileId);
+  if (cached) {
+    cached.lastAccessed = Date.now();
+    return {
+      blobUrl: cached.blobUrl,
+      blob: cached.blob,
+      mimeType: cached.mimeType,
+    };
+  }
+  return null;
+}
+
+export function cacheDriveAudioBlob(fileId: string, result: DirectAudioResult): void {
+  // Check if already in cache
+  if (audioBlobCache.has(fileId)) {
+    const existing = audioBlobCache.get(fileId)!;
+    existing.lastAccessed = Date.now();
+    return;
+  }
+
+  // Evict oldest if reaching capacity
+  if (audioBlobCache.size >= MAX_BLOB_CACHE_COUNT) {
+    let oldestKey: string | null = null;
+    let oldestTime = Infinity;
+    for (const [key, entry] of audioBlobCache.entries()) {
+      if (entry.lastAccessed < oldestTime) {
+        oldestTime = entry.lastAccessed;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey) {
+      const evicted = audioBlobCache.get(oldestKey);
+      audioBlobCache.delete(oldestKey);
+      if (evicted?.blobUrl && evicted.blobUrl.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(evicted.blobUrl);
+        } catch {}
+      }
+    }
+  }
+
+  audioBlobCache.set(fileId, {
+    blobUrl: result.blobUrl,
+    blob: result.blob,
+    mimeType: result.mimeType,
+    lastAccessed: Date.now(),
+  });
+}
+
+export function clearDriveAudioBlobCache(): void {
+  for (const entry of audioBlobCache.values()) {
+    if (entry.blobUrl && entry.blobUrl.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(entry.blobUrl);
+      } catch {}
+    }
+  }
+  audioBlobCache.clear();
 }
 
 /**
@@ -62,12 +138,22 @@ export function isStaticDeployment(): boolean {
 /**
  * Fetches an audio file directly from Google Drive API v3 using the client's OAuth Bearer token,
  * converts the binary stream to a local in-memory Blob, and returns a same-origin Blob URL.
+ * Automatically checks and uses the in-memory cache for instant playback.
  */
 export async function fetchDirectDriveAudioBlob(
   fileId: string,
   token: string,
   options: DirectAudioOptions = {}
 ): Promise<DirectAudioResult> {
+  // 1. Check in-memory cache first for instant 0ms retrieval
+  if (!options.bypassCache) {
+    const cached = getCachedDriveAudioBlob(fileId);
+    if (cached) {
+      console.log(`[DriveAudio] In-memory cache hit for fileId: ${fileId}. Instant playback.`);
+      return cached;
+    }
+  }
+
   let activeToken = token;
   const initialUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
     fileId
@@ -225,20 +311,32 @@ export async function fetchDirectDriveAudioBlob(
   }
 
   const blobUrl = URL.createObjectURL(blob);
-  return {
+  const result: DirectAudioResult = {
     blobUrl,
     blob,
     mimeType: targetMime,
   };
+
+  // Cache in LRU cache for subsequent instant replays
+  cacheDriveAudioBlob(fileId, result);
+
+  return result;
 }
 
 /**
- * Safely revokes an object URL to free browser memory.
+ * Safely revokes an object URL to free browser memory if it is not in the active cache.
  */
 export function revokeDriveAudioBlobUrl(blobUrl: string | null | undefined): void {
-  if (blobUrl && blobUrl.startsWith("blob:")) {
-    try {
-      URL.revokeObjectURL(blobUrl);
-    } catch {}
+  if (!blobUrl || !blobUrl.startsWith("blob:")) return;
+
+  // Don't revoke if URL is still retained by the LRU cache
+  for (const entry of audioBlobCache.values()) {
+    if (entry.blobUrl === blobUrl) {
+      return;
+    }
   }
+
+  try {
+    URL.revokeObjectURL(blobUrl);
+  } catch {}
 }

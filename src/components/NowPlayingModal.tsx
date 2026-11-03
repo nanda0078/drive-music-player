@@ -315,10 +315,13 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({ onAddToPlaylis
           {/* Play/Pause */}
           <button
             id="btn-now-playing-play"
-            onClick={togglePlayPause}
-            className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 active:scale-95 transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlayPause();
+            }}
+            className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 active:scale-95 transition-all cursor-pointer"
             title={isPlaying ? "Jeda" : "Putar"}
-            aria-label={isPlaying ? "Jeda" : "Putar"}
+            aria-label={isPlaying ? "Jeda Pemutaran" : "Mulai Pemutaran"}
           >
             {isLoading ? (
               <Loader2 className="w-8 h-8 animate-spin" />

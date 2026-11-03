@@ -242,6 +242,9 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
   const retryCountRef = useRef<number>(0);
   const isRecoveringRef = useRef<boolean>(false);
   const isUserPausedRef = useRef<boolean>(true);
+  const isPlayingRef = useRef<boolean>(false);
+  const lastToggleTimeRef = useRef<number>(0);
+  const playCountTimerRef = useRef<NodeJS.Timeout | null>(null);
   const trackEndInterceptorRef = useRef<(() => boolean) | null>(null);
   const trackPlayListenerRef = useRef<((track: MusicTrack) => void) | null>(null);
 
@@ -288,6 +291,33 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
   const isShuffledRef = useRef<boolean>(isShuffled);
   isShuffledRef.current = isShuffled;
 
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const cancelPlayCountIncrement = useCallback(() => {
+    if (playCountTimerRef.current) {
+      clearTimeout(playCountTimerRef.current);
+      playCountTimerRef.current = null;
+    }
+  }, []);
+
+  const schedulePlayCountIncrement = useCallback(
+    (track: MusicTrack) => {
+      cancelPlayCountIncrement();
+      // Delay playCount increment until user listens continuously for 5 seconds
+      playCountTimerRef.current = setTimeout(() => {
+        try {
+          trackPlayListenerRef.current?.(track);
+        } catch (e) {
+          console.warn("Track play listener notice:", e);
+        }
+        playCountTimerRef.current = null;
+      }, 5000);
+    },
+    [cancelPlayCountIncrement]
+  );
+
   const clearPlaybackTimeout = useCallback(() => {
     if (playbackTimeoutRef.current) {
       clearTimeout(playbackTimeoutRef.current);
@@ -322,14 +352,22 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const pausePlayback = useCallback(() => {
     clearPlaybackTimeout();
+    cancelPlayCountIncrement();
     isUserPausedRef.current = true;
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setIsLoading(false);
     equalizerEngine.setPlaybackActive(false);
     backgroundAudioService.releaseWakeLock();
-    if (audioRef.current && !audioRef.current.paused) {
-      audioRef.current.pause();
-      setIsPlaying(false);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = "paused";
     }
-  }, [clearPlaybackTimeout]);
+    if (audioRef.current && !audioRef.current.paused) {
+      try {
+        audioRef.current.pause();
+      } catch {}
+    }
+  }, [clearPlaybackTimeout, cancelPlayCountIncrement]);
 
   // Derive current index in queue
   const currentIndex = React.useMemo(() => {
@@ -864,7 +902,9 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const handleWaiting = () => {
       console.log(`[Audio:Diagnostic] waiting (buffering) - currentTime: ${audio?.currentTime}`);
-      setIsLoading(true);
+      if (audio && audio.paused) {
+        setIsLoading(true);
+      }
     };
 
     const handleCanPlay = () => {
@@ -891,6 +931,7 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
       isRecoveringRef.current = false;
       if (currentTrackRef.current) {
         clearFailedTrack(currentTrackRef.current.id);
+        schedulePlayCountIncrement(currentTrackRef.current);
       }
       equalizerEngine.setPlaybackActive(true);
       equalizerEngine.ensureAudioContextRunning().catch(() => {});
@@ -910,7 +951,9 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const handlePause = () => {
       if (isUserPausedRef.current) {
+        isPlayingRef.current = false;
         setIsPlaying(false);
+        cancelPlayCountIncrement();
         equalizerEngine.setPlaybackActive(false);
         backgroundAudioService.releaseWakeLock();
         if ("mediaSession" in navigator) {
@@ -925,6 +968,7 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const handleEnded = () => {
       clearPlaybackTimeout();
+      cancelPlayCountIncrement();
       // DO NOT set isPlaying(false) or release wake lock if we have next tracks or repeat mode!
       // This preserves continuous Android background media session across track transitions.
       const hasNext =
@@ -1059,8 +1103,37 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
   const loadAndPlayTrack = async (track: MusicTrack, resumePosition: number = 0) => {
     if (!audioRef.current) return;
 
+    // Fast-path: Same track already loaded into audio element and ready
+    if (
+      currentTrackRef.current?.id === track.id &&
+      audioRef.current.src &&
+      audioRef.current.readyState >= 1 &&
+      resumePosition === 0 &&
+      !hasPlaybackError
+    ) {
+      clearPlaybackTimeout();
+      cancelPlayCountIncrement();
+      isUserPausedRef.current = false;
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      setIsLoading(false);
+      audioRef.current.currentTime = 0;
+      equalizerEngine.setPlaybackActive(true);
+      equalizerEngine.ensureAudioContextRunning().catch(() => {});
+      backgroundAudioService.requestWakeLock().catch(() => {});
+      schedulePlayCountIncrement(track);
+      audioRef.current.play().catch((err) => {
+        if (err.name !== "AbortError") {
+          console.warn("[Player] Fast-path play error:", err);
+        }
+      });
+      return;
+    }
+
     clearPlaybackTimeout();
+    cancelPlayCountIncrement();
     isUserPausedRef.current = false;
+    isPlayingRef.current = false;
     equalizerEngine.setPlaybackActive(true);
     setIsLoading(true);
     setHasPlaybackError(false);
@@ -1215,18 +1288,13 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       try {
         await audio.play();
+        isPlayingRef.current = true;
         setIsPlaying(true);
         setIsLoading(false);
         retryCountRef.current = 0;
         clearPlaybackTimeout();
         clearFailedTrack(track.id);
-
-        // Notify listener for play count increment / analytics
-        try {
-          trackPlayListenerRef.current?.(track);
-        } catch (e) {
-          console.warn("Track play listener notice:", e);
-        }
+        schedulePlayCountIncrement(track);
       } catch (playErr: any) {
         if (playErr.name === "AbortError") {
           // Play request was interrupted by newer action
@@ -1327,28 +1395,83 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const togglePlayPause = () => {
-    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // 200ms debounce to prevent double-click / rapid click race conditions
+    const now = Date.now();
+    if (now - lastToggleTimeRef.current < 200) {
+      return;
+    }
+    lastToggleTimeRef.current = now;
+
     if (isPlaying) {
+      // --- INSTANT PAUSE (0ms) ---
       clearPlaybackTimeout();
+      cancelPlayCountIncrement();
       isUserPausedRef.current = true;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setIsLoading(false);
       equalizerEngine.setPlaybackActive(false);
-      audioRef.current.pause();
+      backgroundAudioService.releaseWakeLock();
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = "paused";
+      }
+      try {
+        audio.pause();
+      } catch (pauseErr) {
+        console.warn("[Player] Pause warning:", pauseErr);
+      }
     } else {
+      // --- INSTANT PLAY / RESUME (0ms) ---
       isUserPausedRef.current = false;
-      equalizerEngine.setPlaybackActive(true);
+      setHasPlaybackError(false);
+      setPlaybackErrorType(null);
+      setErrorMessage(null);
+
       if (currentTrack) {
-        // If audio src is missing or in error state, reload
-        if (!audioRef.current.src || hasPlaybackError) {
+        // Fast path: Audio already has loaded src and readyState
+        if (audio.src && !hasPlaybackError && audio.readyState >= 1) {
+          // Immediately give user feedback (0ms)
+          isPlayingRef.current = true;
+          setIsPlaying(true);
+          setIsLoading(false);
+
+          equalizerEngine.initialize(audio);
+          equalizerEngine.setPlaybackActive(true);
+          equalizerEngine.ensureAudioContextRunning().catch(() => {});
+          backgroundAudioService.requestWakeLock().catch(() => {});
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "playing";
+          }
+          schedulePlayCountIncrement(currentTrack);
+
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err: any) => {
+              if (err.name === "AbortError") {
+                // Ignore AbortError when play was interrupted by rapid pause
+                return;
+              }
+              console.warn("[Player] Resume play error:", err);
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              cancelPlayCountIncrement();
+              if (err.name === "NotAllowedError") {
+                // Blocked by browser autoplay policy
+                return;
+              }
+              // Only retry if real playback error occurred
+              retryPlayback();
+            });
+          }
+        } else {
+          // Audio source needs to be fetched or re-initialized
+          setIsLoading(true);
           clearFailedTrack(currentTrack.id);
           retryCountRef.current = 0;
           loadAndPlayTrack(currentTrack, lastKnownPositionRef.current);
-        } else {
-          equalizerEngine.initialize(audioRef.current);
-          equalizerEngine.ensureAudioContextRunning().catch(() => {});
-          audioRef.current.play().catch((err) => {
-            console.error("Play failed:", err);
-            retryPlayback();
-          });
         }
       }
     }
@@ -1655,6 +1778,7 @@ export const MusicPlayerProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const resetPlayerState = useCallback(() => {
     clearPlaybackTimeout();
+    cancelPlayCountIncrement();
     if (onlineFetchAbortControllerRef.current) {
       onlineFetchAbortControllerRef.current.abort();
       onlineFetchAbortControllerRef.current = null;
