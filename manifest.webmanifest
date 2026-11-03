@@ -1,5 +1,5 @@
 {
-  "name": "Drive Music Player",
+  "name": "Drive Music",
   "short_name": "Drive Music",
   "description": "Pemutar musik pribadi Google Drive dengan streaming cepat, offline caching, dan background playback.",
   "start_url": "./",
