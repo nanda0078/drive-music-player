@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery = "",
   onSearchChange,
 }) => {
-  const { canInstall, isInstalled, isStandalone, promptInstall } = usePwa();
+  const { canInstall, isInstalled, isStandalone, promptInstall, openInstallGuide } = usePwa();
   const { isEqEnabled, setIsEqualizerOpen } = useEqualizer();
   const { isActive: isSleepTimerActive, setIsSleepTimerModalOpen, formatRemainingTime } = useSleepTimer();
 
@@ -96,16 +96,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Actions */}
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-        {/* Install PWA Button if available (desktop / tablet) */}
-        {canInstall && !isInstalled && !isStandalone && (
+        {/* Install PWA Button if available */}
+        {!isInstalled && !isStandalone && (
           <button
             id="btn-navbar-install-pwa"
-            onClick={promptInstall}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-            title="Install aplikasi ke Android / Layar Utama"
+            onClick={() => {
+              if (canInstall) {
+                promptInstall();
+              } else {
+                openInstallGuide();
+              }
+            }}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            title="Install Drive Music ke Layar Utama Android"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Install</span>
+            <span className="hidden xs:inline sm:inline">Install</span>
           </button>
         )}
 

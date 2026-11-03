@@ -34,6 +34,9 @@ interface PwaContextType {
   isUpdateAvailable: boolean;
   installStatus: PwaInstallStatus;
   statusLabel: string;
+  isInstallGuideOpen: boolean;
+  setIsInstallGuideOpen: (open: boolean) => void;
+  openInstallGuide: () => void;
   promptInstall: () => Promise<"accepted" | "dismissed" | "failed">;
   applyUpdate: () => void;
   dismissInstallBanner: () => void;
@@ -51,6 +54,7 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false);
   const [isPromptPending, setIsPromptPending] = useState<boolean>(false);
+  const [isInstallGuideOpen, setIsInstallGuideOpen] = useState<boolean>(false);
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
     return localStorage.getItem("pwa_install_dismissed") === "true";
   });
@@ -60,6 +64,10 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fileName: "drive-music-player.apk",
     version: "1.0.0",
   });
+
+  const openInstallGuide = useCallback(() => {
+    setIsInstallGuideOpen(true);
+  }, []);
 
   // Check standalone display mode
   useEffect(() => {
@@ -113,6 +121,7 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCanInstall(false);
       setIsInstalled(true);
       setIsPromptPending(false);
+      setIsInstallGuideOpen(false);
       localStorage.removeItem("pwa_install_dismissed");
       console.log("[PWA] App successfully installed to device home screen.");
     };
@@ -220,7 +229,8 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const promptInstall = async (): Promise<"accepted" | "dismissed" | "failed"> => {
     if (!deferredPrompt) {
-      console.warn("[PWA] promptInstall called but no deferredPrompt is available.");
+      console.warn("[PWA] promptInstall called but no deferredPrompt is available. Showing manual guide.");
+      setIsInstallGuideOpen(true);
       return "failed";
     }
 
@@ -243,6 +253,7 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) {
       console.error("[PWA] Install prompt error:", err);
       setIsPromptPending(false);
+      setIsInstallGuideOpen(true);
       return "failed";
     }
   };
@@ -269,6 +280,9 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isUpdateAvailable,
         installStatus,
         statusLabel,
+        isInstallGuideOpen,
+        setIsInstallGuideOpen,
+        openInstallGuide,
         promptInstall,
         applyUpdate,
         dismissInstallBanner,

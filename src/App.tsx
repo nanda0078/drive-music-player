@@ -48,6 +48,7 @@ import { FolderUploadModal, FolderUploadItem } from "./components/FolderUploadMo
 import { IntegrationSettingsModal } from "./components/IntegrationSettingsModal";
 import { ResetAppDataModal } from "./components/ResetAppDataModal";
 import { InstallPwaBanner } from "./components/InstallPwaBanner";
+import { InstallGuideModal } from "./components/InstallGuideModal";
 import { PwaUpdateNotification } from "./components/PwaUpdateNotification";
 import { OfflineDownloadOfferBanner } from "./components/OfflineDownloadOfferBanner";
 import { DriveStorageCard } from "./components/DriveStorageCard";
@@ -83,7 +84,14 @@ import {
 
 const MainAppContent: React.FC = () => {
   const { showToast } = useToast();
-  const { canInstall, isInstalled, isStandalone, promptInstall } = usePwa();
+  const {
+    canInstall,
+    isInstalled,
+    isStandalone,
+    promptInstall,
+    isInstallGuideOpen,
+    setIsInstallGuideOpen,
+  } = usePwa();
   const {
     user,
     authStatus,
@@ -1605,6 +1613,12 @@ const MainAppContent: React.FC = () => {
 
       {/* Offline Download Offer Banner when Online Stream Fails */}
       <OfflineDownloadOfferBanner />
+
+      {/* Android PWA Install Step-by-Step Guide Modal */}
+      <InstallGuideModal
+        isOpen={isInstallGuideOpen}
+        onClose={() => setIsInstallGuideOpen(false)}
+      />
     </div>
   );
 };

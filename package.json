@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "drive-music",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -9,7 +9,10 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy",
+    "cap:android": "cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

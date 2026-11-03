@@ -1,9 +1,9 @@
-// Drive Music Player - Service Worker
-const CACHE_VERSION = "drive-music-pwa-v1.4.0";
+// Drive Music - Service Worker v2.0.0 (Selective Caching & Instant PWA Support)
+const CACHE_VERSION = "drive-music-pwa-v2.0.0";
 const STATIC_CACHE_NAME = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE_NAME = `runtime-${CACHE_VERSION}`;
 
-// Core assets to pre-cache on install (using relative paths for GitHub Pages subpath compatibility)
+// Core assets to pre-cache on install (relative paths for GitHub Pages subpath compatibility)
 const PRECACHE_ASSETS = [
   "./",
   "./index.html",
@@ -17,7 +17,7 @@ const PRECACHE_ASSETS = [
   "./icon-maskable.svg",
 ];
 
-// Install Event: Cache Core Assets & Skip Waiting
+// Install Event: Cache Core UI Shell Assets & Prepare Activation
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -25,12 +25,12 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(PRECACHE_ASSETS))
       .then(() => self.skipWaiting())
       .catch((err) => {
-        console.warn("[SW] Pre-cache failed:", err);
+        console.warn("[SW] Pre-cache warning:", err);
       })
   );
 });
 
-// Activate Event: Cleanup Old Caches & Claim Clients Immediately
+// Activate Event: Clean Up Stale Caches & Claim Clients Immediately
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -38,9 +38,14 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name.startsWith("drive-music-") && name !== STATIC_CACHE_NAME && name !== RUNTIME_CACHE_NAME)
+            .filter(
+              (name) =>
+                name.startsWith("drive-music-") &&
+                name !== STATIC_CACHE_NAME &&
+                name !== RUNTIME_CACHE_NAME
+            )
             .map((name) => {
-              console.log("[SW] Deleting old cache:", name);
+              console.log("[SW] Removing outdated cache:", name);
               return caches.delete(name);
             })
         );
@@ -49,28 +54,44 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch Event: Network-First for APIs & Drive Streams, Stale-While-Revalidate for UI Assets
+// Fetch Event: Selective Caching Strategy
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests and browser extensions
+  // 1. Skip non-GET requests and unsupported protocols
   if (request.method !== "GET" || !url.protocol.startsWith("http")) {
     return;
   }
 
-  // Pass Google Drive API, Firebase Firestore, and Range requests directly through network
-  if (
-    url.hostname.includes("googleapis.com") ||
+  // 2. EXCLUDE LARGE AUDIO FILES, GOOGLE DRIVE STREAMS, AUTH & TOKENS FROM SW CACHE
+  // Never cache audio streaming endpoints, byte-range requests, or authentication data
+  const isAudioOrStream =
+    url.pathname.includes("/api/audio/") ||
+    url.pathname.includes("/api/stream") ||
+    url.hostname.includes("googleapis.com/drive") ||
+    url.searchParams.has("alt") && url.searchParams.get("alt") === "media" ||
+    request.headers.get("range");
+
+  const isAuthOrToken =
+    url.hostname.includes("accounts.google.com") ||
+    url.hostname.includes("oauth2.googleapis.com") ||
+    url.hostname.includes("identitytoolkit.googleapis.com") ||
+    url.hostname.includes("securetoken.googleapis.com") ||
+    url.pathname.includes("/token") ||
+    url.searchParams.has("token");
+
+  const isFirestoreOrFirebase =
+    url.hostname.includes("firestore.googleapis.com") ||
     url.hostname.includes("firebase") ||
-    url.hostname.includes("firestore") ||
-    request.headers.get("range") ||
-    url.pathname.startsWith("/api/")
-  ) {
-    return; // Direct network bypass
+    url.pathname.startsWith("/api/auth");
+
+  if (isAudioOrStream || isAuthOrToken || isFirestoreOrFirebase) {
+    // Pure network pass-through — never touch SW cache
+    return;
   }
 
-  // For app navigation requests (HTML), use Network-First with Cache fallback
+  // 3. For app navigation requests (HTML), use Network-First with Cache fallback
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
@@ -92,7 +113,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For static assets (JS, CSS, SVGs, Fonts), use Stale-While-Revalidate
+  // 4. For static app shell assets (JS, CSS, SVGs, Images, Web Manifest), use Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)
@@ -112,7 +133,7 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Listen for update triggers from client
+// Listen for SKIP_WAITING message to trigger instant seamless client update
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
