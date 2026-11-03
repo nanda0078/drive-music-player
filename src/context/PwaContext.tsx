@@ -1,4 +1,22 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+export type PwaInstallStatus =
+  | "unsupported" // Browser / context does not support Service Worker or PWA installation
+  | "not_configured" // Service worker or manifest not ready / not eligible yet
+  | "ready_to_install" // beforeinstallprompt fired, ready for user install action
+  | "prompt_pending" // User clicked install, awaiting prompt acceptance
+  | "installed"; // Application is running in standalone mode or was installed
+
+export interface ApkBuildInfo {
+  available: boolean;
+  fileName: string;
+  version: string;
+  fileSizeBytes?: number;
+  fileSizeFormatted?: string;
+  downloadUrl?: string;
+  builtAt?: string;
+  rawPath?: string;
+}
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -14,10 +32,14 @@ interface PwaContextType {
   isInstalled: boolean;
   isStandalone: boolean;
   isUpdateAvailable: boolean;
-  promptInstall: () => Promise<boolean>;
+  installStatus: PwaInstallStatus;
+  statusLabel: string;
+  promptInstall: () => Promise<"accepted" | "dismissed" | "failed">;
   applyUpdate: () => void;
   dismissInstallBanner: () => void;
   isBannerDismissed: boolean;
+  apkInfo: ApkBuildInfo;
+  refreshApkInfo: () => Promise<void>;
 }
 
 const PwaContext = createContext<PwaContextType | null>(null);
@@ -28,10 +50,16 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false);
+  const [isPromptPending, setIsPromptPending] = useState<boolean>(false);
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
     return localStorage.getItem("pwa_install_dismissed") === "true";
   });
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  const [apkInfo, setApkInfo] = useState<ApkBuildInfo>({
+    available: false,
+    fileName: "drive-music-player.apk",
+    version: "1.0.0",
+  });
 
   // Check standalone display mode
   useEffect(() => {
@@ -77,14 +105,16 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const promptEvent = e as BeforeInstallPromptEvent;
       setDeferredPrompt(promptEvent);
       setCanInstall(true);
+      console.log("[PWA] beforeinstallprompt event captured and ready.");
     };
 
     const handleAppInstalled = () => {
       setDeferredPrompt(null);
       setCanInstall(false);
       setIsInstalled(true);
+      setIsPromptPending(false);
       localStorage.removeItem("pwa_install_dismissed");
-      console.log("[PWA] App installed to home screen.");
+      console.log("[PWA] App successfully installed to device home screen.");
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -96,21 +126,22 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Register Service Worker & handle updates
+  // Register Service Worker & handle updates with GitHub Pages subpath support
   useEffect(() => {
     if ("serviceWorker" in navigator) {
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const swUrl = new URL(baseUrl.endsWith("/") ? `${baseUrl}sw.js` : `${baseUrl}/sw.js`, window.location.origin).href;
+      
       navigator.serviceWorker
-        .register("/sw.js")
+        .register(swUrl, { scope: baseUrl })
         .then((registration) => {
           console.log("[PWA] Service Worker registered with scope:", registration.scope);
 
-          // Check if there is already an update waiting
           if (registration.waiting) {
             setWaitingWorker(registration.waiting);
             setIsUpdateAvailable(true);
           }
 
-          // Listen for new service worker installation
           registration.onupdatefound = () => {
             const installingWorker = registration.installing;
             if (installingWorker) {
@@ -130,7 +161,6 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.warn("[PWA] Service Worker registration failed:", err);
         });
 
-      // Reload page when new service worker takes control
       let refreshing = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         if (!refreshing) {
@@ -141,25 +171,79 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const promptInstall = async (): Promise<boolean> => {
+  // Fetch APK info if available
+  const refreshApkInfo = useCallback(async () => {
+    try {
+      const baseUrl = import.meta.env.BASE_URL || "/";
+      const infoUrl = new URL(baseUrl.endsWith("/") ? `${baseUrl}apk/info.json` : `${baseUrl}/apk/info.json`, window.location.origin).href;
+      const res = await fetch(infoUrl, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        const apkUrl = new URL(
+          baseUrl.endsWith("/") ? `${baseUrl}apk/${data.fileName || "drive-music-player.apk"}` : `${baseUrl}/apk/${data.fileName || "drive-music-player.apk"}`,
+          window.location.origin
+        ).href;
+        setApkInfo({
+          ...data,
+          downloadUrl: apkUrl,
+        });
+      }
+    } catch (e) {
+      console.warn("[APK] Could not load APK info:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshApkInfo();
+  }, [refreshApkInfo]);
+
+  // Determine current install status
+  let installStatus: PwaInstallStatus = "not_configured";
+  let statusLabel = "Belum Dikonfigurasi";
+
+  if (!("serviceWorker" in navigator)) {
+    installStatus = "unsupported";
+    statusLabel = "Tidak Didukung Browser";
+  } else if (isStandalone || isInstalled) {
+    installStatus = "installed";
+    statusLabel = "Sudah Terinstal";
+  } else if (isPromptPending) {
+    installStatus = "prompt_pending";
+    statusLabel = "Menunggu Persetujuan";
+  } else if (canInstall && deferredPrompt) {
+    installStatus = "ready_to_install";
+    statusLabel = "Siap Diinstal";
+  } else {
+    installStatus = "not_configured";
+    statusLabel = "Manual / Siap Digunakan";
+  }
+
+  const promptInstall = async (): Promise<"accepted" | "dismissed" | "failed"> => {
     if (!deferredPrompt) {
-      return false;
+      console.warn("[PWA] promptInstall called but no deferredPrompt is available.");
+      return "failed";
     }
 
     try {
+      setIsPromptPending(true);
       await deferredPrompt.prompt();
       const choiceResult = await deferredPrompt.userChoice;
+      setIsPromptPending(false);
+
       if (choiceResult.outcome === "accepted") {
         setDeferredPrompt(null);
         setCanInstall(false);
         setIsInstalled(true);
-        return true;
+        console.log("[PWA] User accepted installation prompt.");
+        return "accepted";
       } else {
-        return false;
+        console.log("[PWA] User dismissed installation prompt.");
+        return "dismissed";
       }
     } catch (err) {
       console.error("[PWA] Install prompt error:", err);
-      return false;
+      setIsPromptPending(false);
+      return "failed";
     }
   };
 
@@ -183,10 +267,14 @@ export const PwaProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isInstalled,
         isStandalone,
         isUpdateAvailable,
+        installStatus,
+        statusLabel,
         promptInstall,
         applyUpdate,
         dismissInstallBanner,
         isBannerDismissed,
+        apkInfo,
+        refreshApkInfo,
       }}
     >
       {children}

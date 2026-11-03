@@ -7,17 +7,12 @@ import {
   Radio,
   CheckCircle2,
   AlertCircle,
-  ShieldCheck,
   RefreshCw,
-  Smartphone,
-  Download,
-  Info,
   RotateCcw,
   Trash2,
   Clock,
 } from "lucide-react";
 import { User } from "firebase/auth";
-import { usePwa } from "../context/PwaContext";
 import { DriveStorageCard } from "./DriveStorageCard";
 import { AUTOHIDE_STORAGE_KEY, AUTOHIDE_OPTIONS } from "./MiniPlayer";
 
@@ -40,8 +35,6 @@ export const IntegrationSettingsModal: React.FC<IntegrationSettingsModalProps> =
   isOnline,
   onOpenResetModal,
 }) => {
-  const { canInstall, isInstalled, isStandalone, promptInstall } = usePwa();
-
   const [autoHideVal, setAutoHideVal] = React.useState<number>(() => {
     try {
       const s = localStorage.getItem(AUTOHIDE_STORAGE_KEY);
@@ -80,7 +73,7 @@ export const IntegrationSettingsModal: React.FC<IntegrationSettingsModalProps> =
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base leading-tight">Pengaturan Integrasi & PWA</h3>
-              <p className="text-xs text-slate-500">Status Google Drive, Firebase, dan Instalasi Android</p>
+              <p className="text-xs text-slate-500">Status Google Drive, Firebase, dan Layanan Cloud</p>
             </div>
           </div>
           <button
@@ -93,59 +86,6 @@ export const IntegrationSettingsModal: React.FC<IntegrationSettingsModalProps> =
 
         {/* Content Body */}
         <div className="p-4 sm:p-6 space-y-4 max-h-[480px] overflow-y-auto">
-          {/* PWA / Android Installation Card */}
-          <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/50 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">Aplikasi Android (PWA / APK)</h4>
-                  <p className="text-xs text-slate-500">Layar Penuh, Ikon Home Screen, Tanpa Browser Bar</p>
-                </div>
-              </div>
-
-              {isInstalled || isStandalone ? (
-                <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Terpasang (Standalone)
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/60">
-                  <Info className="w-3.5 h-3.5" /> Siap Diinstal
-                </span>
-              )}
-            </div>
-
-            <div className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-200/60 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Mode Tampilan:</span>
-                <span className="font-semibold text-slate-800">
-                  {isStandalone ? "Standalone (Full Screen Android)" : "Web Browser"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Service Worker:</span>
-                <span className="font-semibold text-emerald-600">Aktif & Offline Cached</span>
-              </div>
-              <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                Aplikasi ini mendukung Progressive Web App (PWA) dan kompatibel dibungkus menjadi Android APK via Capacitor.
-              </p>
-            </div>
-
-            {canInstall && !isInstalled && !isStandalone && (
-              <button
-                onClick={() => {
-                  promptInstall();
-                }}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Install Aplikasi ke Android Sekarang</span>
-              </button>
-            )}
-          </div>
-
           {/* 1. Google Drive Integration Status */}
           <div className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-3">
             <div className="flex items-center justify-between">

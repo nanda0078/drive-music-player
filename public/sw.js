@@ -1,17 +1,20 @@
 // Drive Music Player - Service Worker
-const CACHE_VERSION = "drive-music-pwa-v1.3.0";
+const CACHE_VERSION = "drive-music-pwa-v1.4.0";
 const STATIC_CACHE_NAME = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE_NAME = `runtime-${CACHE_VERSION}`;
 
-// Core assets to pre-cache on install
+// Core assets to pre-cache on install (using relative paths for GitHub Pages subpath compatibility)
 const PRECACHE_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.webmanifest",
-  "/icon.svg",
-  "/icon-192.svg",
-  "/icon-512.svg",
-  "/icon-maskable.svg",
+  "./",
+  "./index.html",
+  "./manifest.webmanifest",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./icon-maskable.png",
+  "./icon.svg",
+  "./icon-192.svg",
+  "./icon-512.svg",
+  "./icon-maskable.svg",
 ];
 
 // Install Event: Cache Core Assets & Skip Waiting
@@ -83,7 +86,7 @@ self.addEventListener("fetch", (event) => {
         .catch(async () => {
           const cachedResponse = await caches.match(request);
           if (cachedResponse) return cachedResponse;
-          return caches.match("/index.html");
+          return caches.match("./index.html") || caches.match("/");
         })
     );
     return;

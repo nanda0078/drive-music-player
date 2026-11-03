@@ -2,9 +2,9 @@
   "name": "Drive Music Player",
   "short_name": "Drive Music",
   "description": "Pemutar musik pribadi Google Drive dengan streaming cepat, offline caching, dan background playback.",
-  "start_url": "/",
-  "scope": "/",
-  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
   "orientation": "portrait-primary",
@@ -16,25 +16,43 @@
   "categories": ["music", "entertainment", "utilities"],
   "icons": [
     {
-      "src": "/icon-192.svg",
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icon-192.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.svg",
+      "src": "./icon-512.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable.svg",
+      "src": "./icon-maskable.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "maskable"
     },
     {
-      "src": "/icon.svg",
+      "src": "./icon.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
@@ -45,22 +63,22 @@
       "name": "Library Musik",
       "short_name": "Library",
       "description": "Buka koleksi lagu dan folder musik",
-      "url": "/?tab=library",
-      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+      "url": "./?tab=library",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Upload Musik",
       "short_name": "Upload",
       "description": "Unggah lagu atau folder musik ke Google Drive",
-      "url": "/?tab=upload",
-      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+      "url": "./?tab=upload",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Playlist",
       "short_name": "Playlist",
       "description": "Buka daftar putar lagu",
-      "url": "/?tab=playlist",
-      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+      "url": "./?tab=playlist",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
